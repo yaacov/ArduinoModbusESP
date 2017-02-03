@@ -27,6 +27,7 @@
 #include <ModbusSlaveTCP.h>
 #include <ESP8266mDNS.h>
 #include <dht11.h>
+#include <OneWire.h>
 
 const char* ssid = "***";
 const char* pass = "***";
@@ -39,11 +40,62 @@ dht11 DHT11;
 #define SLAVE_ID 1
 #define DHT11PIN 2
 #define LEDPIN  13
+#define DS18PIN  4
 
 /**
  *  Modbus object declaration
  */
 ModbusTCP slave(SLAVE_ID);
+
+// DS18S20 Temperature chip i/o
+OneWire ds(DS18PIN);  // on pin 10
+byte addr[8];
+float t2 = 0;
+
+// read DS18S20 device
+int readDS() {
+    int HighByte, LowByte, TReading, SignBit, Tc_100;
+    byte i, sensor;
+    byte present = 0;
+    byte data[12];
+
+    // check CRC
+    if ( OneWire::crc8( addr, 7) != addr[7]) {
+      Serial.println("bad CRC");
+      return 0;
+    }
+
+    if ( addr[0] != 40) {
+      Serial.print("not DS18S20 ");
+      Serial.println(addr[0]);
+      return 0;
+    }
+
+    ds.reset();
+    ds.select(addr);
+    ds.write(0x44,1);         // start conversion, with parasite power on at the end
+
+    delay(250);     // maybe 750ms is enough, maybe not
+    // we might do a ds.depower() here, but the reset will take care of it.
+
+    present = ds.reset();
+    ds.select(addr);
+    ds.write(0xBE);         // Read Scratchpad
+
+    for ( i = 0; i < 9; i++) {           // we need 9 bytes
+      data[i] = ds.read();
+    }
+
+    LowByte = data[0];
+    HighByte = data[1];
+    TReading = (HighByte << 8) + LowByte;
+    SignBit = TReading & 0x8000;  // test most sig bit
+    if (SignBit) {
+      TReading = (TReading ^ 0xffff) + 1; // 2's comp
+    }
+
+    return TReading * 100 / 2;
+}
 
 // delta max = 0.6544 wrt dewPoint()
 // 6.9 x faster than dewPoint()
@@ -96,6 +148,13 @@ void setup() {
     if (mdns.begin("modbus", WiFi.localIP())) {
       Serial.println("MDNS responder started");
     }
+
+    // look up DS18S20 device
+    if (!ds.search(addr)) {
+      ds.reset_search();
+      delay(250);
+      Serial.println("DS18S20 not found");
+    }
 }
 
 void loop() {
@@ -106,6 +165,9 @@ void loop() {
      * call the user handler function.
      */
     slave.poll();
+
+    // read the temperature
+    t2 = (float)readDS();
 }
 
 /**
@@ -138,12 +200,19 @@ void readDigitalIn(uint8_t fc, uint16_t address, uint16_t length) {
  */
 void readAnalogIn(uint8_t fc, uint16_t address, uint16_t length) {
     int chk = DHT11.read(DHT11PIN);
+    float t = 0;
+    float h = 0;
+    float d = 0;
 
     Serial.print("Read sensor: ");
     switch (chk)
     {
         case DHTLIB_OK:
             Serial.println("OK");
+            t = (float)DHT11.temperature;
+            h = (float)DHT11.humidity;
+            d = dewPointFast(t, h);
+
             break;
         case DHTLIB_ERROR_CHECKSUM:
             Serial.println("Checksum error");
@@ -156,12 +225,11 @@ void readAnalogIn(uint8_t fc, uint16_t address, uint16_t length) {
             break;
     }
 
-    float t = (float)DHT11.temperature;
-    float h = (float)DHT11.humidity;
-    float d = dewPointFast(t, h);
-
-    Serial.print("Temperature (°C): ");
+    Serial.print("Temperature DHT (°C): ");
     Serial.println(t);
+
+    Serial.print("Temperature DS18 (°C): ");
+    Serial.println(t2 / 1000.0);
 
     Serial.print("Humidity (%): ");
     Serial.println(h);
@@ -173,13 +241,16 @@ void readAnalogIn(uint8_t fc, uint16_t address, uint16_t length) {
         switch (address + i)
         {
             case 0:
-                slave.writeRegisterToBuffer(i, t * 100);
+                slave.writeRegisterToBuffer(i, t2 / 10);
                 break;
             case 1:
                 slave.writeRegisterToBuffer(i, h * 100);
                 break;
             case 2:
                 slave.writeRegisterToBuffer(i, d * 100);
+                break;
+            case 3:
+                slave.writeRegisterToBuffer(i, t * 100);
                 break;
             default:
                 slave.writeRegisterToBuffer(i, 9999);
