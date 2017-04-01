@@ -24,7 +24,8 @@
 */
 
 #include <ESP8266WiFi.h>
-#include <ModbusSlaveTCP.h>
+//#include <ModbusSlaveTCP.h>
+#include <ModbusSlave.h>
 #include <ESP8266mDNS.h>
 #include <dht11.h>
 #include <OneWire.h>
@@ -45,7 +46,8 @@ dht11 DHT11;
 /**
  *  Modbus object declaration
  */
-ModbusTCP slave(SLAVE_ID);
+//ModbusTCP slave(SLAVE_ID);
+Modbus slave(SLAVE_ID, 0); // [stream = Serial,] slave id = 1, rs485 control-pin = 8
 
 // DS18S20 Temperature chip i/o
 OneWire ds(DS18PIN);  // on pin 10
@@ -61,13 +63,13 @@ int readDS() {
 
     // check CRC
     if ( OneWire::crc8( addr, 7) != addr[7]) {
-      Serial.println("bad CRC");
+      //Serial.println("bad CRC");
       return 0;
     }
 
     if ( addr[0] != 40) {
-      Serial.print("not DS18S20 ");
-      Serial.println(addr[0]);
+      ////Serial.print("not DS18S20 ");
+      ////Serial.println(addr[0]);
       return 0;
     }
 
@@ -118,13 +120,13 @@ void setup() {
 
     /* Connect WiFi to the network
      */
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
+    //Serial.print("Connecting to ");
+    //Serial.println(ssid);
     WiFi.begin(ssid, pass);
 
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-        Serial.print(".");
+        //Serial.print(".");
     }
 
     /* register handler functions
@@ -136,24 +138,25 @@ void setup() {
 
     /* start slave and listen to TCP port 502
      */
-    slave.begin();
+    //slave.begin();
+    slave.begin(115200);
 
     // log to serial port
-    Serial.println("");
-    Serial.print("Modbus ready, listen on ");
-    Serial.println(ssid);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
+    //Serial.println("");
+    //Serial.print("Modbus ready, listen on ");
+    //Serial.println(ssid);
+    //Serial.print("IP address: ");
+    //Serial.println(WiFi.localIP());
 
     if (mdns.begin("modbus", WiFi.localIP())) {
-      Serial.println("MDNS responder started");
+      //Serial.println("MDNS responder started");
     }
 
     // look up DS18S20 device
     if (!ds.search(addr)) {
       ds.reset_search();
       delay(250);
-      Serial.println("DS18S20 not found");
+      //Serial.println("DS18S20 not found");
     }
 }
 
@@ -167,7 +170,7 @@ void loop() {
     slave.poll();
 
     // read the temperature
-    t2 = (float)readDS();
+    //t2 = (float)readDS();
 }
 
 /**
@@ -204,38 +207,38 @@ void readAnalogIn(uint8_t fc, uint16_t address, uint16_t length) {
     float h = 0;
     float d = 0;
 
-    Serial.print("Read sensor: ");
+    //Serial.print("Read sensor: ");
     switch (chk)
     {
         case DHTLIB_OK:
-            Serial.println("OK");
+            //Serial.println("OK");
             t = (float)DHT11.temperature;
             h = (float)DHT11.humidity;
             d = dewPointFast(t, h);
 
             break;
         case DHTLIB_ERROR_CHECKSUM:
-            Serial.println("Checksum error");
+            //Serial.println("Checksum error");
             break;
         case DHTLIB_ERROR_TIMEOUT:
-            Serial.println("Time out error");
+            //Serial.println("Time out error");
             break;
         default:
-            Serial.println("Unknown error");
+            //Serial.println("Unknown error");
             break;
     }
 
-    Serial.print("Temperature DHT (°C): ");
-    Serial.println(t);
+    //Serial.print("Temperature DHT (°C): ");
+    //Serial.println(t);
 
-    Serial.print("Temperature DS18 (°C): ");
-    Serial.println(t2 / 1000.0);
+    //Serial.print("Temperature DS18 (°C): ");
+    //Serial.println(t2 / 1000.0);
 
-    Serial.print("Humidity (%): ");
-    Serial.println(h);
+    //Serial.print("Humidity (%%): ");
+    //Serial.println(h);
 
-    Serial.print("Dew PointFast (°C): ");
-    Serial.println(d);
+    //Serial.print("Dew PointFast (°C): ");
+    //Serial.println(d);
 
     for (uint16_t i = 0; i < length; i++) {
         switch (address + i)
