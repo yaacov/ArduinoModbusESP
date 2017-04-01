@@ -68,8 +68,8 @@ int readDS() {
     }
 
     if ( addr[0] != 40) {
-      ////Serial.print("not DS18S20 ");
-      ////Serial.println(addr[0]);
+      //Serial.print("not DS18S20 ");
+      //Serial.println(addr[0]);
       return 0;
     }
 
