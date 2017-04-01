@@ -112,6 +112,8 @@ double dewPointFast(double celsius, double humidity)
 }
 
 void setup() {
+    int countConnectionTriels = 0;
+
     pinMode(LEDPIN, OUTPUT);
 
     /* Start serial port
@@ -124,8 +126,9 @@ void setup() {
     //Serial.println(ssid);
     WiFi.begin(ssid, pass);
 
-    while (WiFi.status() != WL_CONNECTED) {
+    while (WiFi.status() != WL_CONNECTED && countConnectionTriels < 30) {
         delay(500);
+        countConnectionTriels++;
         //Serial.print(".");
     }
 
